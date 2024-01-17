@@ -1,6 +1,12 @@
-package glow;
+package jade;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import components.Component;
+import components.ComponentDeserializer;
+import components.SpriteRenderer;
+import imgui.ImGui;
+import util.AssetPool;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -8,24 +14,15 @@ import java.util.List;
 public class GameObject {
     private static int ID_COUNTER = 0;
     private int uid = -1;
-    private String name;
+    public String name;
     private List<Component> components;
-    public Transform transform;
-    private int zIndex;
+    public transient Transform transform;
     private boolean doSerialization = true;
+    private boolean isDead = false;
 
     public GameObject(String name){
         this.name = name;
         this.components = new ArrayList<>();
-        this.transform = new Transform();
-        this.zIndex = 0;
-    }
-
-    public GameObject(String name, Transform transform, int zIndex){
-        this.name = name;
-        this.zIndex = zIndex;
-        this.components = new ArrayList<>();
-        this.transform = transform;
 
         this.uid = ID_COUNTER++;
     }
@@ -66,6 +63,12 @@ public class GameObject {
         }
     }
 
+    public void editorUpdate(float dt){
+        for(int i = 0; i < components.size(); i++){
+            components.get(i).editorUpdate(dt);
+        }
+    }
+
     public void start(){
         for (int i = 0; i < components.size(); i++){
             components.get(i).start();
@@ -74,12 +77,40 @@ public class GameObject {
 
     public void imgui(){
         for(Component c : components){
-            c.imgui();
+            if (ImGui.collapsingHeader(c.getClass().getSimpleName()))
+                c.imgui();
         }
     }
 
-    public int zIndex() {
-        return this.zIndex;
+    public void destroy(){
+        this.isDead = true;
+        for (int i = 0; i < components.size(); i++){
+            components.get(i).destroy();
+        }
+    }
+
+    public GameObject copy(){
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(Component.class, new ComponentDeserializer())
+                .registerTypeAdapter(GameObject.class, new GameObjectDeserializer())
+                .enableComplexMapKeySerialization()
+                .create();
+        String objAsJson = gson.toJson(this);
+        GameObject obj = gson.fromJson(objAsJson, GameObject.class);
+        obj.generateUid();
+        for (Component c : obj.getAllComponents()){
+            c.generateId();
+        }
+
+        SpriteRenderer sprite = obj.getComponent(SpriteRenderer.class);
+        if (sprite != null && sprite.getTexture() != null){
+            sprite.setTexture(AssetPool.getTexture(sprite.getTexture().getFilepath()));
+        }
+        return obj;
+    }
+
+    public boolean isDead(){
+        return this.isDead;
     }
 
     public static void init(int maxID){
@@ -88,6 +119,10 @@ public class GameObject {
 
     public int getUid() {
         return this.uid;
+    }
+
+    public void generateUid(){
+        this.uid = ID_COUNTER++;
     }
 
     public List<Component> getAllComponents(){

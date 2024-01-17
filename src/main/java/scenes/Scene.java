@@ -4,10 +4,12 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import components.Component;
 import components.ComponentDeserializer;
-import glow.Camera;
-import glow.GameObject;
-import glow.GameObjectDeserializer;
-import imgui.ImGui;
+import jade.Camera;
+import jade.GameObject;
+import jade.GameObjectDeserializer;
+import jade.Transform;
+import org.joml.Vector2f;
+import physics2d.Physics2D;
 import renderer.Renderer;
 
 import java.io.FileWriter;
@@ -18,26 +20,42 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-public abstract class Scene {
+public class Scene {
 
-    protected Renderer renderer =  new Renderer();
-    protected Camera camera;
-    private boolean isRunning = false;
-    protected List<GameObject> gameObjects = new ArrayList<>();
-    protected boolean levelLoaded = false;
+    private Renderer renderer;
+    private Camera camera;
+    private boolean isRunning;
+    private List<GameObject> gameObjects;
+    private List<GameObject> pendingObjects;
 
-    public Scene(){
+    private SceneIntializer sceneIntializer;
+    private Physics2D physics2D;
 
+    public Scene(SceneIntializer sceneIntializer){
+        this.sceneIntializer = sceneIntializer;
+        this.physics2D = new Physics2D();
+        this.renderer = new Renderer();
+        this.gameObjects = new ArrayList<>();
+        this.pendingObjects = new ArrayList<>();
+        this.isRunning = false;
+    }
+
+    public Physics2D getPhysics(){
+        return this.physics2D;
     }
 
     public void init(){
-
+        this.camera = new Camera(new Vector2f(0, 0));
+        this.sceneIntializer.loadResources(this);
+        this.sceneIntializer.init(this);
     }
 
     public void start(){
-        for(GameObject go : gameObjects){
+        for(int i=0; i < gameObjects.size(); i++){
+            GameObject go = gameObjects.get(i);
             go.start();
             this.renderer.add(go);
+            this.physics2D.add(go);
         }
         isRunning = true;
     }
@@ -47,10 +65,27 @@ public abstract class Scene {
             gameObjects.add(go);
         }
         else{
-            gameObjects.add(go);
-            go.start();
-            this.renderer.add(go);
+            pendingObjects.add(go);
         }
+    }
+
+    public void destroy(){
+         for (GameObject go : gameObjects){
+             go.destroy();
+         }
+    }
+
+    public <T extends Component> GameObject getGameObjectWith(Class<T> clazz){
+        for (GameObject go : gameObjects){
+            if (go.getComponent(clazz) != null){
+                return go;
+            }
+        }
+        return null;
+    }
+
+    public List<GameObject> getGameObjects(){
+        return this.gameObjects;
     }
 
     public GameObject getGameObject(int gameObjectId){
@@ -58,22 +93,84 @@ public abstract class Scene {
         return result.orElse(null);
     }
 
-    public abstract void update(float dt);
-    public abstract void render();
+    public GameObject getGameObject(String gameObjectName){
+        Optional<GameObject> result = this.gameObjects.stream().filter(gameObject -> gameObject.name.equals(gameObjectName)).findFirst();
+        return result.orElse(null);
+    }
+
+    public void editorUpdate(float dt){
+        this.camera.adjustProjection();
+
+        for(int i=0; i < gameObjects.size(); i++){
+            GameObject go = gameObjects.get(i);
+            go.editorUpdate(dt);
+
+            if (go.isDead()){
+                gameObjects.remove(i);
+                this.renderer.destroyGameObject(go);
+                this.physics2D.destroyGameObject(go);
+                i--;
+            }
+        }
+
+        for (GameObject go : pendingObjects) {
+            gameObjects.add(go);
+            go.start();
+            this.renderer.add(go);
+            this.physics2D.add(go);
+        }
+        pendingObjects.clear();
+    }
+
+    public void update(float dt){
+        this.camera.adjustProjection();
+        this.physics2D.update(dt);
+
+        for(int i=0; i < gameObjects.size(); i++){
+            GameObject go = gameObjects.get(i);
+            go.update(dt);
+
+            if (go.isDead()){
+                gameObjects.remove(i);
+                this.renderer.destroyGameObject(go);
+                this.physics2D.destroyGameObject(go);
+                i--;
+            }
+        }
+
+        for (GameObject go : pendingObjects){
+            gameObjects.add(go);
+            go.start();
+            this.renderer.add(go);
+            this.physics2D.add(go);
+        }
+        pendingObjects.clear();
+    }
+    public void render(){
+        this.renderer.render();
+    }
 
     public Camera camera(){
         return this.camera;
     }
 
     public void imgui(){
-
+        this.sceneIntializer.imgui();
     }
 
-    public void saveExit(){
+    public GameObject createGameObject(String name){
+        GameObject go = new GameObject(name);
+        go.addComponent(new Transform());
+        go.transform = go.getComponent(Transform.class);
+        return go;
+    }
+
+    public void save(){
         Gson gson = new GsonBuilder()
                 .setPrettyPrinting()
                 .registerTypeAdapter(Component.class, new ComponentDeserializer())
                 .registerTypeAdapter(GameObject.class, new GameObjectDeserializer())
+                .enableComplexMapKeySerialization()
                 .create();
        try{
            FileWriter writer = new FileWriter("level.txt");
@@ -95,6 +192,7 @@ public abstract class Scene {
                 .setPrettyPrinting()
                 .registerTypeAdapter(Component.class, new ComponentDeserializer())
                 .registerTypeAdapter(GameObject.class, new GameObjectDeserializer())
+                .enableComplexMapKeySerialization()
                 .create();
         String inFile = "";
         try{
@@ -125,7 +223,6 @@ public abstract class Scene {
             maxCompId++;
             GameObject.init(maxGoId);
             Component.init(maxCompId);
-            this.levelLoaded = true;
         }
     }
 }

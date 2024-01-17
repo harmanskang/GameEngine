@@ -6,6 +6,9 @@ group = 'org.example'
 version = '1.0-SNAPSHOT'
 
 repositories {
+    flatDir{
+        dirs 'libs'
+    }
     jcenter()
     mavenCentral()
 }
@@ -22,18 +25,17 @@ test {
 project.ext.lwjglVersion = "3.3.3"
 project.ext.jomlVersion = "1.10.5"
 project.ext.lwjglNatives = "natives-windows"
-project.ext.imguiVersion = "1.77-0.17.1"
+project.ext.imguiVersion = "1.81.0"
 
 dependencies {
+    //Box2D
+    implementation name: 'jbox2d-library'
+
     //GSON
     implementation 'com.google.code.gson:gson:2.10.1'
 
     //IMGUI stuff
-    implementation "io.imgui.java:binding:$imguiVersion"
-    implementation "io.imgui.java:lwjgl3:$imguiVersion"
-
-    // Include all available natives, but it's likely that you want something specific
-    runtimeOnly "io.imgui.java:natives-windows:$imguiVersion"
+    implementation "io.github.spair:imgui-java-app:$imguiVersion"
 
     //LWJGL stuff
     implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")

@@ -1,6 +1,7 @@
 package renderer;
 
-import glow.Window;
+import jade.Camera;
+import jade.Window;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 import util.AssetPool;
@@ -16,7 +17,7 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL30.glGenVertexArrays;
 
 public class DebugDraw {
-    private static int MAX_LINES = 6000;
+    private static int MAX_LINES = 5000;
 
     private static List<Line2D> lines = new ArrayList<>();
     //6 floats per vertex, 2 vertices per line
@@ -87,7 +88,7 @@ public class DebugDraw {
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, vboID);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, Arrays.copyOfRange(vertexArray, 0, lines.size() * 6 * 2));
+        glBufferData(GL_ARRAY_BUFFER, vertexArray, GL_DYNAMIC_DRAW);
 
         //use shader
         shader.use();
@@ -100,7 +101,7 @@ public class DebugDraw {
         glEnableVertexAttribArray(1);
 
         //draw batch
-        glDrawArrays(GL_LINES, 0, lines.size() * 6 * 2);
+        glDrawArrays(GL_LINES, 0, lines.size());
 
         //disable location
         glDisableVertexAttribArray(0);
@@ -121,7 +122,14 @@ public class DebugDraw {
     }
 
     public static void addLine2D(Vector2f from, Vector2f to, Vector3f color, int lifetime){
-        if(lines.size() >= MAX_LINES) return;
+        Camera camera = Window.getScene().camera();
+        Vector2f cameraLeft = new Vector2f(camera.position).add(new Vector2f(-2f, -2f));
+        Vector2f cameraRight = new Vector2f(camera.position).add(new Vector2f(camera.getProjectionSize()).mul(camera.getZoom())).add(new Vector2f(4f, 4f));
+        boolean lineInView = ((from.x >= cameraLeft.x && from.x <= cameraRight.x) && (from.y >= cameraLeft.y && from.y <= cameraRight.y)) ||
+                ((to.x >= cameraLeft.x && to.x <= cameraRight.x) && (to.y >= cameraLeft.y && to.y <= cameraRight.y));
+        if(lines.size() >= MAX_LINES || !lineInView) {
+            return;
+        }
         DebugDraw.lines.add(new Line2D(from, to, color, lifetime));
     }
 
@@ -162,21 +170,22 @@ public class DebugDraw {
         addCircle(center, radius, color, 1);
     }
 
-    public static void addCircle(Vector2f center, float radius, Vector3f color, int lifetime){
-       Vector2f[] points = new Vector2f[20];
-       float increment  = (float) 360 / points.length;
-       float currentAngle = 0;
-       for (int i=0; i < points.length; i++){
-           Vector2f tmp = new Vector2f(radius, 0);
-           JMath.rotate(tmp, currentAngle, new Vector2f());
-           points[i] = new Vector2f(tmp).add(center);
+    public static void addCircle(Vector2f center, float radius, Vector3f color, int lifetime) {
+        Vector2f[] points = new Vector2f[20];
+        int increment = 360 / points.length;
+        int currentAngle = 0;
 
-           if (i > 0){
-               addLine2D(points[i -1], points[i], color, lifetime);
-           }
-           currentAngle += increment;
-       }
+        for (int i=0; i < points.length; i++) {
+            Vector2f tmp = new Vector2f(0, radius);
+            JMath.rotate(tmp, currentAngle, new Vector2f());
+            points[i] = new Vector2f(tmp).add(center);
 
-       addLine2D(points[points.length - 1], points[0], color, lifetime);
+            if (i > 0) {
+                addLine2D(points[i - 1], points[i], color, lifetime);
+            }
+            currentAngle += increment;
+        }
+
+        addLine2D(points[points.length - 1], points[0], color, lifetime);
     }
 }

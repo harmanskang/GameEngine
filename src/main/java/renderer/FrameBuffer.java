@@ -5,8 +5,12 @@ import static org.lwjgl.opengl.GL30.*;
 public class FrameBuffer {
     private int fboID = 0;
     private Texture texture = null;
+    public int width, height;
 
     public FrameBuffer(int width, int height){
+        this.width = width;
+        this.height = height;
+
         //generate framebuffer
         fboID = glGenFramebuffers();
         glBindFramebuffer(GL_FRAMEBUFFER, fboID);

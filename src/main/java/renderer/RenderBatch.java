@@ -1,11 +1,11 @@
 package renderer;
 
 import components.SpriteRenderer;
-import glow.Window;
+import jade.GameObject;
+import jade.Window;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
-import util.AssetPool;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,8 +43,11 @@ public class RenderBatch implements Comparable<RenderBatch>{
     private int vaoID, vboID;
     private int maxBatchSize;
     private int zIndex;
+    private Renderer renderer;
 
-    public RenderBatch(int maxBatchSize, int zIndex){
+    public RenderBatch(int maxBatchSize, int zIndex, Renderer renderer){
+        this.renderer = renderer;
+
         this.zIndex = zIndex;
         this.sprites = new SpriteRenderer[maxBatchSize];
         this.maxBatchSize = maxBatchSize;
@@ -115,9 +118,20 @@ public class RenderBatch implements Comparable<RenderBatch>{
         for(int i = 0; i < numSprites; i++){
             SpriteRenderer spr = sprites[i];
             if (spr.isDirty()) {
-                loadVertexProperties(i);
-                spr.setClean();
-                rebufferData = true;
+                if (!hasTexture(spr.getTexture())){
+                    this.renderer.destroyGameObject(spr.gameObject);
+                    this.renderer.add(spr.gameObject);
+                } else {
+                    loadVertexProperties(i);
+                    spr.setClean();
+                    rebufferData = true;
+                }
+            }
+
+            if (spr.gameObject.transform.zIndex != this.zIndex){
+                destroyIfExists(spr.gameObject);
+                renderer.add(spr.gameObject);
+                i--;
             }
         }
         if(rebufferData) {
@@ -180,15 +194,15 @@ public class RenderBatch implements Comparable<RenderBatch>{
         }
 
         // Add vertices with the appropriate properties
-        float xAdd = 1.0f;
-        float yAdd = 1.0f;
+        float xAdd = 0.5f;
+        float yAdd = 0.5f;
         for (int i=0; i < 4; i++) {
             if (i == 1) {
-                yAdd = 0.0f;
+                yAdd = -0.5f;
             } else if (i == 2) {
-                xAdd = 0.0f;
+                xAdd = -0.5f;
             } else if (i == 3) {
-                yAdd = 1.0f;
+                yAdd = 0.5f;
             }
 
             Vector4f currentPos = new Vector4f(sprite.gameObject.transform.position.x + (xAdd * sprite.gameObject.transform.scale.x),
@@ -246,12 +260,28 @@ public class RenderBatch implements Comparable<RenderBatch>{
         elements[offsetArrayIndex + 5] = offset + 1;
     }
 
+    public boolean destroyIfExists(GameObject go){
+        SpriteRenderer sprite = go.getComponent(SpriteRenderer.class);
+        for (int i=0; i < numSprites; i++){
+            if (sprites[i] == sprite){
+                for (int j=i; j < numSprites - 1; j++){
+                    sprites[j] = sprites[j + 1];
+                    sprites[j].setDirty();
+                }
+                numSprites--;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public boolean hasRoom(){
         return this.hasRoom;
     }
 
     public boolean hasTextureRoom(){
-        return this.textures.size() < 8;
+        return this.textures.size() < 7;
     }
 
     public boolean hasTexture(Texture tex){

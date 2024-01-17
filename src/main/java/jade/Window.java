@@ -1,57 +1,61 @@
-package glow;
+package jade;
 
+import observers.EventSystem;
+import observers.Observer;
+import observers.events.Event;
+import org.joml.Vector4f;
 import org.lwjgl.Version;
 import org.lwjgl.glfw.GLFWErrorCallback;
+import org.lwjgl.openal.AL;
+import org.lwjgl.openal.ALC;
+import org.lwjgl.openal.ALCCapabilities;
+import org.lwjgl.openal.ALCapabilities;
 import org.lwjgl.opengl.GL;
+import physics2d.Physics2D;
 import renderer.*;
-import scenes.LevelEditorScene;
-import scenes.LevelScene;
+import scenes.LevelEditorSceneIntializer;
+import scenes.LevelSceneIntializer;
 import scenes.Scene;
+import scenes.SceneIntializer;
 import util.AssetPool;
 
 import static org.lwjgl.glfw.Callbacks.glfwFreeCallbacks;
 import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.openal.ALC10.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
-public class Window {
+public class Window implements Observer {
     private int width, height;
     private String title;
     private long glfwWindow;
     private ImGuiLayer imguiLayer;
     private FrameBuffer framebuffer;
     private PickingTexture pickingTexture;
-
-    public float r, g, b, a;
-    private boolean fadeToBlack = false;
+    private boolean runtimePlaying = false;
     private static Window window = null;
 
+    private long audioContext;
+    private long audioDevice;
+
     private static Scene currentScene;
+
 
     private Window(){
         this.width = 1920;
         this.height = 1080;
         this.title = "Mario";
-        r = 1;
-        b = 1;
-        g = 1;
-        a = 1;
+        EventSystem.addObserver(this);
 
     }
 
-    public static void changeScene(int newScene){
-        switch (newScene){
-            case 0:
-                currentScene = new LevelEditorScene();
-                break;
-            case 1:
-                currentScene = new LevelScene();
-                break;
-            default:
-                assert false : "Unknown scene '" + newScene + "'";
-                break;
+    public static void changeScene(SceneIntializer sceneIntializer){
+        if (currentScene != null){
+            currentScene.destroy();
         }
 
+        getImguiLayer().getPropertiesWindow().setActiveGameObject(null);
+        currentScene = new Scene(sceneIntializer);
         currentScene.load();
         currentScene.init();
         currentScene.start();
@@ -64,6 +68,10 @@ public class Window {
         return Window.window;
     }
 
+    public static Physics2D getPhysics(){
+        return currentScene.getPhysics();
+    }
+
     public static Scene getScene(){
         return get().currentScene;
     }
@@ -73,6 +81,10 @@ public class Window {
 
         init();
         loop();
+
+        //destroy audio context
+        alcDestroyContext(audioContext);
+        alcCloseDevice(audioDevice);
 
         //free the memory
         glfwFreeCallbacks(glfwWindow);
@@ -122,6 +134,21 @@ public class Window {
         //make window visible
         glfwShowWindow(glfwWindow);
 
+        //initialize the audio device
+        String defaultDeviceName = alcGetString(0, ALC_DEFAULT_DEVICE_SPECIFIER);
+        audioDevice = alcOpenDevice(defaultDeviceName);
+
+        int[] attributes = {0};
+        audioContext = alcCreateContext(audioDevice, attributes);
+        alcMakeContextCurrent(audioContext);
+
+        ALCCapabilities alcCapabilities = ALC.createCapabilities(audioDevice);
+        ALCapabilities alCapabilities = AL.createCapabilities(alcCapabilities);
+
+        if (!alCapabilities.OpenAL10){
+            assert false : "Audio library not supported.";
+        }
+
         // This line is critical for LWJGL's interoperation with GLFW's
         // OpenGL context, or any context that is managed externally.
         // LWJGL detects the context that is current in the current thread,
@@ -139,12 +166,12 @@ public class Window {
         this.imguiLayer = new ImGuiLayer(glfwWindow, pickingTexture);
         this.imguiLayer.initImGui();
 
-        Window.changeScene(0);
+        Window.changeScene(new LevelEditorSceneIntializer());
     }
 
     public void loop(){
         float beginTime = (float)glfwGetTime();
-        float endTime = (float)glfwGetTime();
+        float endTime;
         float dt = -1.0f;
 
         Shader defaultShader = AssetPool.getShader("assets/shaders/default.glsl");
@@ -159,16 +186,11 @@ public class Window {
             pickingTexture.enableWriting();
 
             glViewport(0, 0, 1920, 1080);
-            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            glClearColor(0, 0, 0, 0);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             Renderer.bindShader(pickingShader);
             currentScene.render();
-
-            if(MouseListener.mouseButtonDown(GLFW_MOUSE_BUTTON_LEFT)){
-                int x = (int)MouseListener.getScreenX();
-                int y = (int)MouseListener.getScreenY();
-            }
 
             pickingTexture.disableWriting();
             glEnable(GL_BLEND);
@@ -177,34 +199,42 @@ public class Window {
             DebugDraw.beginFrame();
 
             this.framebuffer.bind();
-            glClearColor(r, g, b, a);
+            Vector4f clearColor = currentScene.camera().clearColor;
+            glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
             glClear(GL_COLOR_BUFFER_BIT);
 
             if (dt >= 0){
-                DebugDraw.draw();
                 Renderer.bindShader(defaultShader);
-                currentScene.update(dt);
+                if (runtimePlaying) {
+                    currentScene.update(dt);
+                }else {
+                    currentScene.editorUpdate(dt);
+                }
                 currentScene.render();
+                DebugDraw.draw();
             }
             this.framebuffer.unbind();
 
             this.imguiLayer.update(dt, currentScene);
-            glfwSwapBuffers(glfwWindow);
+
+            KeyListener.endFrame();
             MouseListener.endFrame();
+            glfwSwapBuffers(glfwWindow);
 
             endTime = (float)glfwGetTime();
             dt = endTime - beginTime;
             beginTime = endTime;
         }
-        currentScene.saveExit();
     }
 
     public static int getWidth(){
-        return get().width;
+        return 1920;
+        //return get().width;
     }
 
     public static int getHeight(){
-        return get().height;
+        return 1080;
+        //return get().height;
     }
 
     public static void setWidth (int newWidth){
@@ -225,5 +255,22 @@ public class Window {
 
     public static ImGuiLayer getImguiLayer(){
         return get().imguiLayer;
+    }
+
+    @Override
+    public void onNotify(GameObject object, Event event) {
+        switch (event.type){
+            case GameEngineStartPlay -> {
+                this.runtimePlaying = true;
+                currentScene.save();
+                Window.changeScene(new LevelSceneIntializer());
+            }
+            case GameEngineStopPlay -> {
+                this.runtimePlaying = false;
+                Window.changeScene(new LevelEditorSceneIntializer());
+            }
+            case LoadLevel -> Window.changeScene(new LevelEditorSceneIntializer());
+            case SaveLevel -> currentScene.save();
+        }
     }
 }

@@ -1,8 +1,8 @@
 package components;
 
-import glow.Camera;
-import glow.KeyListener;
-import glow.MouseListener;
+import jade.Camera;
+import jade.KeyListener;
+import jade.MouseListener;
 import org.joml.Vector2f;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_KP_DECIMAL;
@@ -16,7 +16,7 @@ public class EditorCamera extends Component{
     private Vector2f clickOrigin;
     private boolean reset = false;
 
-    private float lerpTime = 0;
+    private float lerpTime = 0f;
     private float dragSensitivity = 30.0f;
     private float scrollSensitivity = 0.1f;
 
@@ -26,13 +26,13 @@ public class EditorCamera extends Component{
     }
 
     @Override
-    public void update(float dt){
+    public void editorUpdate(float dt){
         if(MouseListener.mouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT) && dragDebounce > 0){
-            this.clickOrigin = new Vector2f(MouseListener.getOrthoX(), MouseListener.getOrthoY());
+            this.clickOrigin = MouseListener.getWorld();
             dragDebounce -= dt;
             return;
         } else if (MouseListener.mouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
-            Vector2f mousePos = new Vector2f(MouseListener.getOrthoX(), MouseListener.getOrthoY());
+            Vector2f mousePos = MouseListener.getWorld();
             Vector2f delta = new Vector2f(mousePos).sub(this.clickOrigin);
             levelEditorCamera.position.sub(delta.mul(dt).mul(dragSensitivity));
             this.clickOrigin.lerp(mousePos, dt);

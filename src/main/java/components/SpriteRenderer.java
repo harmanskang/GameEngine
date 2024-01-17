@@ -1,10 +1,11 @@
 package components;
 
-import glow.Transform;
-import imgui.ImGui;
+import editor.JImGui;
+import jade.Transform;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 import renderer.Texture;
+import util.AssetPool;
 
 public class SpriteRenderer extends Component {
     private Vector4f color = new Vector4f(1, 1, 1, 1);
@@ -13,20 +14,11 @@ public class SpriteRenderer extends Component {
     private transient Transform lastTranform;
     private transient boolean isDirty = true;
 
-//    public SpriteRenderer(Vector4f color){
-//        this.color = color;
-//        this.sprite = new Sprite(null);
-//        this.isDirty = true;
-//    }
-//
-//    public SpriteRenderer(Sprite sprite){
-//        this.sprite = sprite;
-//        this.color = new Vector4f(1, 1, 1, 1);
-//        this.isDirty = true;
-//    }
-
     @Override
     public void start(){
+        if (this.sprite.getTexture() != null) {
+            this.sprite.setTexture(AssetPool.getTexture(this.sprite.getTexture().getFilepath()));
+        }
         this.lastTranform = gameObject.transform.copy();
     }
 
@@ -39,10 +31,16 @@ public class SpriteRenderer extends Component {
     }
 
     @Override
+    public void editorUpdate(float dt) {
+        if(!this.lastTranform.equals(this.gameObject.transform)){
+            this.gameObject.transform.copy(this.lastTranform);
+            isDirty = true;
+        }
+    }
+
+    @Override
     public void imgui(){
-        float[] imColor = {color.x, color.y, color.z, color.w};
-        if (ImGui.colorPicker4("Color Picker: ", imColor)){
-            this.color.set(imColor[0], imColor[1], imColor[2], imColor[3]);
+        if (JImGui.colorPicker4("Color Picker", this.color)){
             this.isDirty = true;
         }
     }
@@ -73,6 +71,11 @@ public class SpriteRenderer extends Component {
 
     public boolean isDirty() {
         return this.isDirty;
+    }
+
+
+    public void setDirty(){
+        this.isDirty = true;
     }
 
     public void setClean(){

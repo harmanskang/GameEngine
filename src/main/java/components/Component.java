@@ -1,7 +1,10 @@
 package components;
 
-import glow.GameObject;
+import editor.JImGui;
+import jade.GameObject;
 import imgui.ImGui;
+import imgui.type.ImInt;
+import org.jbox2d.dynamics.contacts.Contact;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -20,6 +23,26 @@ public abstract class Component {
     }
 
     public void update (float dt){
+
+    }
+
+    public void editorUpdate(float dt){
+
+    }
+
+    public void beginCollision(GameObject collidingObject, Contact contact,Vector2f hitNormal){
+
+    }
+
+    public void endCollision(GameObject collidingObject, Contact contact,Vector2f hitNormal){
+
+    }
+
+    public void preSolve(GameObject collidingObject, Contact contact,Vector2f hitNormal){
+
+    }
+
+    public void postSolve(GameObject collidingObject, Contact contact,Vector2f hitNormal){
 
     }
 
@@ -43,27 +66,18 @@ public abstract class Component {
 
                 if(type == int.class){
                     int val = (int)value;
-                    int[] imInt = {val};
-                    if(ImGui.dragInt(name + ": ", imInt)){
-                        field.set(this, imInt[0]);
-                    }
+                    field.set(this, JImGui.dragInt(name, val));
                 } else if (type == float.class) {
                     float val = (float)value;
-                    float[] imFloat = {val};
-                    if(ImGui.dragFloat(name + ": ", imFloat)){
-                        field.set(this, imFloat[0]);
-                    }
+                    field.set(this, JImGui.dragFloat(name, val));
                 } else if (type == boolean.class) {
                     boolean val = (boolean)value;
-                    if(ImGui.checkbox(name = ": ", val)){
+                    if(ImGui.checkbox(name + ": ", val)){
                         field.set(this, !val);
                     }
                 } else if (type == Vector2f.class) {
                     Vector2f val = (Vector2f) value;
-                    float[] imVec = {val.x, val.y};
-                    if (ImGui.dragFloat2(name + ": ", imVec)) {
-                        val.set(imVec[0], imVec[1]);
-                    }
+                    JImGui.drawVec2Control(name, val);
                 } else if (type == Vector3f.class) {
                     Vector3f val = (Vector3f) value;
                     float[] imVec = {val.x, val.y, val.z};
@@ -72,10 +86,17 @@ public abstract class Component {
                     }
                 }else if (type == Vector4f.class) {
                     Vector4f val = (Vector4f) value;
-                    float[] imVec = {val.x, val.y, val.z, val.w};
-                    if (ImGui.dragFloat4(name + ": ", imVec)) {
-                        val.set(imVec[0], imVec[1], imVec[2], imVec[3]);
+                    JImGui.colorPicker4(name, val);
+                } else if (type.isEnum()) {
+                    String[] enumValues = getEnumValues(type);
+                    String enumType = ((Enum)value).name();
+                    ImInt index = new ImInt(indexOf(enumType, enumValues));
+                    if (ImGui.combo(field.getName(), index, enumValues, enumValues.length)){
+                        field.set(this, type.getEnumConstants()[index.get()]);
                     }
+
+                } else if (type == String.class) {
+                    field.set(this, JImGui.inputText(field.getName() + ": ", (String)value));
                 }
 
                 if (isPrivate){
@@ -91,6 +112,29 @@ public abstract class Component {
         if(this.uid == -1){
             this.uid = ID_COUNTER++;
         }
+    }
+
+    private <T extends Enum<T>> String[] getEnumValues(Class<T> enumType){
+        String[] enumValues = new String[enumType.getEnumConstants().length];
+        int i = 0;
+        for (T enumIntegerValue : enumType.getEnumConstants()){
+            enumValues[i] = enumIntegerValue.name();
+            i++;
+        }
+        return enumValues;
+    }
+
+    private int indexOf(String str, String[] arr){
+        for (int i = 0; i < arr.length; i++){
+            if (str.equals(arr[i])){
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public void destroy(){
+
     }
 
     public int getUid() {
