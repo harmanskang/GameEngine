@@ -1,15 +1,13 @@
 plugins {
-    id 'java'
+    id 'java-library'
 }
 
-group = 'org.example'
 version = '1.0-SNAPSHOT'
 
 repositories {
     flatDir{
         dirs 'libs'
     }
-    jcenter()
     mavenCentral()
 }
 
@@ -55,4 +53,48 @@ dependencies {
     runtimeOnly "org.lwjgl:lwjgl-opengl::$lwjglNatives"
     runtimeOnly "org.lwjgl:lwjgl-stb::$lwjglNatives"
     implementation "org.joml:joml:${jomlVersion}"
+}
+
+jar {
+    manifest {
+        attributes (
+                'Class-Path': configurations.compileClasspath.collect { it.getName() }.join(' '),
+                'Main-Class': 'Main'
+        )
+    }
+
+    from {
+        configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+task copyAssets(type: Copy) {
+    copy {
+        from "assets"
+        into "${buildDir}/libs/assets"
+    }
+
+    copy {
+        from "level.txt"
+        into "${buildDir}/libs"
+    }
+}
+
+task fatJar(type: Jar) {
+    duplicatesStrategy(DuplicatesStrategy.EXCLUDE)
+    manifest.from jar.manifest
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    } {
+        exclude "META-INF/*.SF"
+        exclude "META-INF/*.DSA"
+        exclude "META-INF/*.RSA"
+    }
+    with jar
+}
+
+fatJar.dependsOn(copyAssets)
+
+artifacts {
+    archives fatJar
 }
